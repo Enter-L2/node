@@ -3,7 +3,6 @@
 use anyhow::Result;
 use serde_json::{Value, json};
 use std::sync::Arc;
-use tracing::{debug, warn};
 
 use crate::storage::Storage;
 use crate::sync::SyncManager;

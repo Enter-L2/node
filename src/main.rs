@@ -20,7 +20,6 @@ mod storage;
 mod p2p;
 mod verification;
 mod metrics;
-mod cli;
 
 use config::NodeConfig;
 use node::Node;

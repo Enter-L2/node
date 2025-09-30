@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info};
 
 use crate::config::{RpcConfig, WebSocketConfig};
 use crate::storage::Storage;
@@ -24,9 +24,8 @@ use websocket::WebSocketServer;
 /// JSON-RPC server
 pub struct RpcServer {
     config: RpcConfig,
-    ws_config: WebSocketConfig,
     methods: Arc<RpcMethods>,
-    ws_server: Option<WebSocketServer>,
+    ws_server: Option<Arc<WebSocketServer>>,
 }
 
 impl RpcServer {
@@ -40,23 +39,22 @@ impl RpcServer {
         let methods = Arc::new(RpcMethods::new(storage, sync_manager));
         
         let ws_server = if ws_config.enabled {
-            Some(WebSocketServer::new(ws_config, methods.clone()).await?)
+            Some(Arc::new(WebSocketServer::new(ws_config, methods.clone()).await?))
         } else {
             None
         };
         
         Ok(Self {
             config: rpc_config.clone(),
-            ws_config: ws_config.clone(),
             methods,
             ws_server,
         })
     }
     
     /// Run the RPC server
-    pub async fn run(self) -> Result<()> {
+    pub async fn run(self: Arc<Self>) -> Result<()> {
         let mut tasks = Vec::new();
-        
+
         // Start HTTP RPC server
         if self.config.enabled {
             let addr = SocketAddr::from(([0, 0, 0, 0], self.config.port));
@@ -85,7 +83,7 @@ impl RpcServer {
         }
         
         // Start WebSocket server
-        if let Some(ws_server) = self.ws_server {
+        if let Some(ws_server) = self.ws_server.clone() {
             tasks.push(tokio::spawn(async move {
                 if let Err(e) = ws_server.run().await {
                     error!("WebSocket server error: {}", e);
@@ -121,7 +119,7 @@ async fn handle_rpc_request(
     methods: Arc<RpcMethods>,
 ) -> Result<Response<Body>, Infallible> {
     // Add CORS headers
-    let mut response = Response::builder()
+    let response = Response::builder()
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Methods", "POST, OPTIONS")
         .header("Access-Control-Allow-Headers", "Content-Type")
